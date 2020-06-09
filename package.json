@@ -1,5 +1,5 @@
 {
-    "name": "inline-webpack-plugin",
+    "name": "@ksky521/inline-webpack-plugin",
     "version": "1.0.0",
     "description": "webpack inline plugin",
     "main": "index.js",
