@@ -21,6 +21,15 @@
     "peerDependencies": {
         "html-webpack-plugin": "^3 || ^4"
     },
+    "keywords": [
+        "webpack",
+        "plugin",
+        "html",
+        "inline-webpack-plugin",
+        "html-webpack-plugin"
+    ],
+    "homepage": "https://github.com/ksky521/inline-webpack-plugin",
+    "repository": "https://github.com/ksky521/inline-webpack-plugin.git",
     "devDependencies": {
         "@ecomfe/eslint-config": "^3.3.0",
         "babel-eslint": "^11.0.0-beta.2",
