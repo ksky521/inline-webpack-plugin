@@ -51,19 +51,16 @@ module.exports = {
             template: './template.html'
         }),
         new InlineWebpackPlugin({
-            chunks: [
-                {
-                    name: 'main',
-                    placeholder: {
-                        css: '<!-- main-css -->'
-                    }
-                },
-                'foo',
-                {name: 'bar'},
-                {
-                    name: 'vendors'
+            test(filepath, chunk) {
+                if (chunk.name === 'main' && /\.css$/.test(filepath)) {
+                    // only for main.css
+                    return '<!-- main-css -->';
                 }
-            ]
+                if (chunk.name === 'foo' || chunk.name === 'vendors') {
+                    // chunk all,include css & js file
+                    return true;
+                }
+            }
         }),
         new MiniCssExtractPlugin({
             filename: '[name].[contenthash:8].css',

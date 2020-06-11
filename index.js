@@ -9,49 +9,44 @@ const isCSS = val => /\.css$/.test(val);
 
 const log = debug(name);
 
+log(version);
 class InlineWebpackPlugin {
     constructor(options = {}) {
         this.version = version;
         this.assetsMap = new Map();
-        this.placeholderMap = new Map();
         this.deleteAssets = [];
         this.options = options;
-
-        this.chunks = this.normalize(options.chunks || []);
-        this.chunkNames = this.chunks.map(chunk => chunk.name);
-    }
-    normalize(chunks) {
-        if (!Array.isArray(chunks)) {
-            chunks = [chunks];
+        if (typeof options.test === 'function') {
+            this.testFunction = options.test;
         }
-        const map = this.placeholderMap;
-        return chunks.map(chunk => {
-            if (typeof chunk === 'string') {
-                map.set(chunk, '');
-                return {
-                    name: chunk
-                };
-            }
-            map.set(chunk.name, chunk.placeholder);
-            return chunk;
-        });
+        else if (options.test && options.test instanceof RegExp) {
+            this.testFunction = (filepath, chunk) => options.test.test(filepath);
+        }
+        else if (typeof options.test === 'string' && options.test !== '') {
+            this.testFunction = (filepath, chunk) => filepath === options.test;
+        }
+        else {
+            throw new Error(
+                `${name}: options.test must be a string or RegExp or function, but get ${typeof options.test}`
+            );
+        }
     }
+
     afterHtmlProcessing(compilation, data, cb) {
         let html = data.html;
-        const chunksName = this.chunkNames;
-        const placeholderMap = this.placeholderMap;
+        const test = this.testFunction;
 
-        const chunk2AssetsMap = new Map();
+        const file2AssetsMap = new Map();
         for (let i = 0, len = compilation.chunks.length; i < len; i++) {
             const chunk = compilation.chunks[i];
-            if (chunksName.includes(chunk.name)) {
-                const placeholder = placeholderMap.get(chunk.name);
-
-                chunk.files.forEach(file => {
-                    // 处理 placeholder 情况
-
-                    let replaceTag = true;
-                    let splitPlaceholder;
+            /* eslint-disable no-loop-func */
+            chunk.files.forEach(file => {
+                // 处理 placeholder 情况
+                let replaceTag = true;
+                let splitPlaceholder;
+                const result = test(file, chunk);
+                if (result) {
+                    const placeholder = typeof result === 'string' ? result : '';
                     if (placeholder && placeholder !== '') {
                         if (isJS(file) && placeholder.js) {
                             splitPlaceholder = placeholder.js;
@@ -63,18 +58,18 @@ class InlineWebpackPlugin {
                             replaceTag = false;
                         }
                     }
-                    chunk2AssetsMap.set(file, {
+                    file2AssetsMap.set(file, {
                         replaceTag,
                         placeholder: splitPlaceholder
                     });
-                });
-            }
+                }
+            });
         }
 
         const assetsMap = this.assetsMap;
 
         compilation.getAssets().forEach(({name, source}) => {
-            const fileObject = chunk2AssetsMap.get(name);
+            const fileObject = file2AssetsMap.get(name);
 
             if (fileObject) {
                 const tag = isJS(name) ? 'script' : 'style';
@@ -90,7 +85,8 @@ class InlineWebpackPlugin {
                 this.deleteAssets.push({name, regExp, replaceTag});
             }
         });
-        log(chunk2AssetsMap, this.deleteAssets, assetsMap);
+        log('file to inline %O', file2AssetsMap);
+        log('tag to delete %O', this.deleteAssets);
         html = this.deleteTag(html);
         data.html = html;
         cb(null, data);

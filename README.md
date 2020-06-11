@@ -38,19 +38,16 @@ module.exports = {
     plugins: [
         // ... html-webpack-plugin required!
         new InlineWebpackPlugin({
-            chunks: [
-                {
-                    name: 'main',
-                    placeholder: {
-                        css: '<!-- main-css -->'
-                    }
-                },
-                'foo',
-                {name: 'bar'},
-                {
-                    name: 'vendors'
+            test(filepath, chunk) {
+                if (chunk.name === 'main' && /\.css$/.test(filepath)) {
+                    // only for main.css
+                    return '<!-- main-css -->';
                 }
-            ]
+                if (chunk.name === 'foo' || chunk.name === 'vendors') {
+                    // chunk all,include css & js file
+                    return true;
+                }
+            }
         })
     ]
 };
@@ -60,11 +57,19 @@ You can find this demo in the [example](https://github.com/ksky521/inline-webpac
 
 ```bash
 npm i
-cd example
-npx webpack
+npm run test
 ```
 
 ## Options
 
--   chunks: `[object]`, with `name`、`placeholder`.
+-   `test`: `string` | `function` | `RegExp`, when `test` is a function, return `true` or `string`, `string` is placeholder to replace, The parameters of the function are:
+    -   filepath: file path
+    -   chunk: chunk object, chunk.name is chunk name.
 
+## Debug log
+
+Use [debug](https://www.npmjs.com/package/debug) for log.
+
+```bash
+DEBUG=@ksky521/inline-webpack-plugin
+```
