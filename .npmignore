@@ -2,3 +2,4 @@ example
 .vscode
 .babelrc
 .prettierrc
+.eslintrc.js
