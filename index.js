@@ -5,36 +5,43 @@ const {name, version} = require('./package.json');
 
 const RE_ANY = /<(script|link)\s?[^>]*?>(?:<\/\1\s?>)?/gm;
 const isJS = val => /\.js$/.test(val);
-const isCSS = val => /\.css$/.test(val);
+// const isCSS = val => /\.css$/.test(val);
 
 const log = debug(name);
 
 log(version);
 class InlineWebpackPlugin {
-    constructor(options = {}) {
+    constructor(options = []) {
         this.version = version;
         this.assetsMap = new Map();
         this.deleteAssets = [];
-        this.options = options;
-        if (typeof options.test === 'function') {
-            this.testFunction = options.test;
+        options = Array.isArray(options) ? options : [options];
+        if (!Array.isArray(options)) {
+            throw new Error(`${name} options must be a array.`);
         }
-        else if (options.test && options.test instanceof RegExp) {
-            this.testFunction = (filepath, chunk) => options.test.test(filepath);
-        }
-        else if (typeof options.test === 'string' && options.test !== '') {
-            this.testFunction = (filepath, chunk) => filepath === options.test;
-        }
-        else {
-            throw new Error(
-                `${name}: options.test must be a string or RegExp or function, but get ${typeof options.test}`
-            );
-        }
+        this.options = options.map(opt => {
+            let test;
+            if (typeof opt.test === 'function') {
+                test = opt.test;
+            }
+            else if (opt.test && opt.test instanceof RegExp) {
+                test = (filepath, chunk) => opt.test.test(filepath);
+            }
+            else if (typeof opt.test === 'string' && opt.test !== '') {
+                test = (filepath, chunk) => filepath === opt.test;
+            }
+            else {
+                throw new Error(
+                    `${name}: [options].test must be a string or RegExp or function, but get ${typeof opt.test}`
+                );
+            }
+            return {...opt, test};
+        });
     }
 
     afterHtmlProcessing(compilation, data, cb) {
         let html = data.html;
-        const test = this.testFunction;
+        const test = (filepath, chunk) => this.options.find(opt => opt.test(filepath, chunk));
 
         const file2AssetsMap = new Map();
         for (let i = 0, len = compilation.chunks.length; i < len; i++) {
@@ -42,25 +49,16 @@ class InlineWebpackPlugin {
             /* eslint-disable no-loop-func */
             chunk.files.forEach(file => {
                 // 处理 placeholder 情况
-                let replaceTag = true;
-                let splitPlaceholder;
                 const result = test(file, chunk);
                 if (result) {
-                    const placeholder = typeof result === 'string' ? result : '';
-                    if (placeholder && placeholder !== '') {
-                        if (isJS(file) && placeholder.js) {
-                            splitPlaceholder = placeholder.js;
-                        }
-                        else if (isCSS(file) && placeholder.css) {
-                            splitPlaceholder = placeholder.css;
-                        }
-                        if (html.indexOf(splitPlaceholder) !== -1) {
-                            replaceTag = false;
-                        }
-                    }
+                    let {placeholder = '', remove = true, content = undefined, attrs = {}} = result;
+
                     file2AssetsMap.set(file, {
-                        replaceTag,
-                        placeholder: splitPlaceholder
+                        chunk,
+                        content,
+                        remove,
+                        attrs,
+                        placeholder
                     });
                 }
             });
@@ -72,17 +70,31 @@ class InlineWebpackPlugin {
             const fileObject = file2AssetsMap.get(name);
 
             if (fileObject) {
+                const {placeholder, content, chunk, attrs, remove = true} = fileObject;
+
                 const tag = isJS(name) ? 'script' : 'style';
-
-                const code = `\n<${tag} data-inline-name="${name}">${source.source()}</${tag}>\n`;
-                assetsMap.set(name, code);
-                const {replaceTag, placeholder} = fileObject;
-                if (placeholder && !replaceTag) {
-                    html = html.split(placeholder).join(code);
+                let code;
+                if (typeof content === 'function') {
+                    code = content(name, chunk);
                 }
+                else if (typeof content === 'string') {
+                    code = content;
+                }
+                const attrString = this._getAttrString(attrs);
+                code = code !== undefined
+                    ? code
+                    : `\n<${tag} data-inline-name="${name}" ${attrString}>${source.source()}</${tag}>\n`;
 
+                assetsMap.set(name, code);
+                let tagAsPlaceholder = true;
+                if (placeholder && placeholder !== '') {
+                    if (html.indexOf(placeholder) !== -1) {
+                        html = html.split(placeholder).join(code);
+                        tagAsPlaceholder = false;
+                    }
+                }
                 const regExp = new RegExp(name);
-                this.deleteAssets.push({name, regExp, replaceTag});
+                this.deleteAssets.push({name, regExp, tagAsPlaceholder, remove});
             }
         });
         log('file to inline %O', file2AssetsMap);
@@ -91,11 +103,23 @@ class InlineWebpackPlugin {
         data.html = html;
         cb(null, data);
     }
-
+    _getAttrString(attrs) {
+        let str = '';
+        if (typeof attrs === 'object') {
+            str += Object.keys(attrs)
+                .map(k => `${k}=${attrs[k] ? JSON.stringify(attrs[k]) : ''}`)
+                .join(' ');
+        }
+        else if (typeof attrs === 'string') {
+            str += attrs;
+        }
+        return str;
+    }
     deleteTag(html) {
         const assetsMap = this.assetsMap;
-        let needDelete = false;
+        let removeTagFlag = false;
         let code = '';
+        let needRemoveOrigTag = false;
         const tagRegExp = RE_ANY;
         const parser = new htmlparser.Parser(
             new htmlparser.DomHandler((error, dom) => {
@@ -104,9 +128,10 @@ class InlineWebpackPlugin {
                 }
                 const attributes = dom[0].attribs;
                 const url = attributes.href || attributes.src;
-                needDelete = this.deleteAssets.some(({name, regExp, replaceTag}) => {
+                removeTagFlag = this.deleteAssets.some(({name, regExp, remove, tagAsPlaceholder}) => {
                     if (regExp.test(url)) {
-                        code = replaceTag ? assetsMap.get(name) : '';
+                        needRemoveOrigTag = remove;
+                        code = tagAsPlaceholder ? assetsMap.get(name) : '';
                         return true;
                     }
                     code = '';
@@ -118,7 +143,7 @@ class InlineWebpackPlugin {
 
         return html.replace(tagRegExp, match => {
             parser.parseComplete(match);
-            return needDelete ? code : match;
+            return removeTagFlag ? (needRemoveOrigTag ? code : code + match) : match;
         });
     }
 

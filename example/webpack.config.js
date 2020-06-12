@@ -50,18 +50,33 @@ module.exports = {
             filename: 'index.html',
             template: './template.html'
         }),
-        new InlineWebpackPlugin({
-            test(filepath, chunk) {
-                if (chunk.name === 'main' && /\.css$/.test(filepath)) {
-                    // only for main.css
-                    return '<!-- main-css -->';
-                }
-                if (chunk.name === 'foo' || chunk.name === 'vendors') {
-                    // chunk all,include css & js file
-                    return true;
-                }
+        new InlineWebpackPlugin([
+            {
+                test(filepath, chunk) {
+                    if (chunk.name === 'main' && /\.css$/.test(filepath)) {
+                        // only for main.css
+                        return true;
+                    }
+                },
+                attrs: {
+                    ['data-inline-props']: 'test'
+                },
+                placeholder: '<!-- main-css -->'
+            },
+            {
+                test: /(foo|vendors)/
+            },
+            {
+                test(filepath, chunk) {
+                    if (chunk.name === 'bar' && /\.css$/.test(filepath)) {
+                        return true;
+                    }
+                },
+                content: 'hello world',
+                remove: false,
+                placeholder: '<!-- replaceit -->'
             }
-        }),
+        ]),
         new MiniCssExtractPlugin({
             filename: '[name].[contenthash:8].css',
             chunkFilename: '[id].css'

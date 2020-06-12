@@ -1,6 +1,6 @@
 {
     "name": "@ksky521/inline-webpack-plugin",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "webpack inline plugin",
     "main": "index.js",
     "author": "ksky521",

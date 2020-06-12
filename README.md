@@ -37,18 +37,33 @@ module.exports = {
     },
     plugins: [
         // ... html-webpack-plugin required!
-        new InlineWebpackPlugin({
-            test(filepath, chunk) {
-                if (chunk.name === 'main' && /\.css$/.test(filepath)) {
-                    // only for main.css
-                    return '<!-- main-css -->';
-                }
-                if (chunk.name === 'foo' || chunk.name === 'vendors') {
-                    // chunk all,include css & js file
-                    return true;
-                }
+        new InlineWebpackPlugin([
+            {
+                test(filepath, chunk) {
+                    if (chunk.name === 'main' && /\.css$/.test(filepath)) {
+                        // only for main.css
+                        return true;
+                    }
+                },
+                attrs: {
+                    ['data-inline-props']: 'test'
+                },
+                placeholder: '<!-- main-css -->'
+            },
+            {
+                test: /(foo|vendors)/
+            },
+            {
+                test(filepath, chunk) {
+                    if (chunk.name === 'bar' && /\.css$/.test(filepath)) {
+                        return true;
+                    }
+                },
+                content: 'hello world',
+                remove: false,
+                placeholder: '<!-- replaceit -->'
             }
-        })
+        ])
     ]
 };
 ```
@@ -62,9 +77,12 @@ npm run test
 
 ## Options
 
--   `test`: `string` | `function` | `RegExp`, when `test` is a function, return `true` or `string`, `string` is placeholder to replace, The parameters of the function are:
+-   `test`: `string` | `function` | `RegExp`, when `test` is a function, the parameters of the function are:
     -   filepath: file path
     -   chunk: chunk object, chunk.name is chunk name.
+-   `placeholder`: `string`, the placeholder. Default is _the assets tag_.
+-   `content`: `string`, Default is 'undefined'.
+-   `remove`: when it set `false`, the assets tag is not be removed. Default is `true'.
 
 ## Debug log
 
